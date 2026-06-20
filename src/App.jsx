@@ -3,6 +3,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 const LOGO_SRC = "/assets/parasara-logo.jpg";
 const LOGO_MARK_SRC = "/assets/parasara-mark.jpg";
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
+const LOCAL_AUTH_ENABLED = import.meta.env.VITE_LOCAL_AUTH !== "false";
+const LOCAL_AUTH_KEY = "parasara_local_accounts";
 const SESSION_KEYS = {
   token: "parasara_token",
   refresh: "parasara_refresh",
@@ -436,6 +438,67 @@ function apiUrl(path) {
   return `${API_BASE_URL}${path}`;
 }
 
+function readLocalAccounts() {
+  try {
+    const accounts = JSON.parse(localStorage.getItem(LOCAL_AUTH_KEY) || "[]");
+    return Array.isArray(accounts) ? accounts : [];
+  } catch {
+    localStorage.removeItem(LOCAL_AUTH_KEY);
+    return [];
+  }
+}
+
+function saveLocalAccounts(accounts) {
+  localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(accounts));
+}
+
+function publicLocalUser(account = {}) {
+  return {
+    id: account.id,
+    businessName: account.businessName,
+    email: account.email,
+    accountMode: account.accountMode || "buyer",
+    profileStrength: account.profileStrength || 30,
+    industry: account.industry,
+    description: account.description || "",
+    website: account.website || "",
+    location: account.location || "",
+    phone: account.phone || "",
+    upiId: account.upiId || "",
+    expertise: account.expertise || "",
+    instagram: account.instagram || "",
+    youtube: account.youtube || "",
+    linkedin: account.linkedin || "",
+    facebook: account.facebook || "",
+    twitter: account.twitter || "",
+    tiktok: account.tiktok || "",
+    snapchat: account.snapchat || "",
+    pinterest: account.pinterest || "",
+    whatsapp: account.whatsapp || "",
+    telegram: account.telegram || "",
+    availability: account.availability || "available",
+    minBudget: account.minBudget || 0,
+    turnaroundDays: account.turnaroundDays || 0,
+    followerCount: account.followerCount || 0,
+    serviceLanguages: account.serviceLanguages || [],
+    serviceCatalog: account.serviceCatalog || [],
+    caseStudies: account.caseStudies || [],
+    averageRating: account.averageRating || 0,
+    reviewCount: account.reviewCount || 0,
+    emailVerified: true,
+    role: account.role || "member",
+    localOnly: true
+  };
+}
+
+function localSessionForUser(user) {
+  return {
+    token: `local-${user.id}-${Date.now()}`,
+    refreshToken: "",
+    user
+  };
+}
+
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -789,9 +852,10 @@ function App() {
 
   useEffect(() => {
     if (!authed) return;
+    if (user?.localOnly) return;
     loadApiData();
     confirmReturnedPayment();
-  }, [authed]);
+  }, [authed, user?.localOnly]);
 
   useEffect(() => {
     if (!user) return;
@@ -988,10 +1052,24 @@ function App() {
 
   async function login(event) {
     event.preventDefault();
+    const email = authForm.email.trim().toLowerCase();
     try {
+      if (LOCAL_AUTH_ENABLED) {
+        const account = readLocalAccounts().find(item => item.email === email);
+        if (account) {
+          if (account.password !== authForm.password) throw new Error("Invalid email or password.");
+          const data = localSessionForUser(publicLocalUser(account));
+          saveSession(data);
+          setToken(data.token);
+          setUser(data.user);
+          setView("dashboard");
+          setToast("Signed in successfully.");
+          return;
+        }
+      }
       const data = await request("/api/auth/login", {
         method: "POST",
-        body: JSON.stringify(authForm)
+        body: JSON.stringify({ ...authForm, email })
       });
       saveSession(data);
       setToken(data.token);
@@ -1006,6 +1084,24 @@ function App() {
   async function saveProfile(event) {
     event.preventDefault();
     try {
+      if (user?.localOnly) {
+        const nextUser = {
+          ...user,
+          ...profileForm,
+          minBudget: Number(profileForm.minBudget) || 0,
+          turnaroundDays: Number(profileForm.turnaroundDays) || 0,
+          followerCount: Number(profileForm.followerCount) || 0,
+          profileStrength: 84,
+          localOnly: true
+        };
+        const accounts = readLocalAccounts();
+        saveLocalAccounts(accounts.map(account => account.id === user.id ? { ...account, ...nextUser, password: account.password } : account));
+        setUser(nextUser);
+        saveSession({ user: nextUser });
+        setDashboard(previous => ({ ...previous, profileStrength: nextUser.profileStrength }));
+        setToast("Profile settings saved.");
+        return;
+      }
       const data = await request("/api/profile", {
         method: "PATCH",
         body: JSON.stringify(profileForm)
@@ -1388,10 +1484,35 @@ function App() {
 
   async function register(event) {
     event.preventDefault();
+    const email = registerForm.email.trim().toLowerCase();
     try {
+      if (LOCAL_AUTH_ENABLED) {
+        if (registerForm.password.length < 8 || registerForm.password.length > 128) throw new Error("Password must be 8 to 128 characters.");
+        const accounts = readLocalAccounts();
+        if (accounts.some(item => item.email === email)) throw new Error("That email is already registered.");
+        const account = {
+          id: `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
+          businessName: registerForm.businessName.trim(),
+          industry: registerForm.industry.trim(),
+          email,
+          password: registerForm.password,
+          profileStrength: 30,
+          createdAt: new Date().toISOString()
+        };
+        saveLocalAccounts([account, ...accounts]);
+        const data = localSessionForUser(publicLocalUser(account));
+        saveSession(data);
+        setToken(data.token);
+        setUser(data.user);
+        setAuthMode("login");
+        setRegisterForm({ businessName: "", email: "", password: "", industry: "" });
+        setToast("Business profile created.");
+        setView("profile");
+        return;
+      }
       const data = await request("/api/auth/register", {
         method: "POST",
-        body: JSON.stringify(registerForm)
+        body: JSON.stringify({ ...registerForm, email })
       });
       saveSession(data);
       setToken(data.token);
