@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 
 const LOGO_SRC = "/assets/parasara-logo.jpg";
 const LOGO_MARK_SRC = "/assets/parasara-mark.jpg";
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
 const SESSION_KEYS = {
   token: "parasara_token",
   refresh: "parasara_refresh",
@@ -431,6 +432,10 @@ function clearSession() {
   Object.values(LEGACY_SESSION_KEYS).forEach(key => sessionStorage.removeItem(key));
 }
 
+function apiUrl(path) {
+  return `${API_BASE_URL}${path}`;
+}
+
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -856,7 +861,7 @@ function App() {
     const authToken = readSessionValue(SESSION_KEYS.token, LEGACY_SESSION_KEYS.token) || token;
     let response;
     try {
-      response = await fetch(path, {
+      response = await fetch(apiUrl(path), {
         ...options,
         headers: {
           "Content-Type": "application/json",
@@ -865,7 +870,7 @@ function App() {
         }
       });
     } catch {
-      throw new Error("API server is not reachable. Start the server with npm run server.");
+      throw new Error("API server is not reachable. Check that the backend is deployed and VITE_API_BASE_URL is set.");
     }
     const rawBody = await response.text();
     let data = {};
@@ -877,7 +882,7 @@ function App() {
     if (response.status === 401 && !retrying && !path.startsWith("/api/auth/")) {
       const refreshToken = readSessionValue(SESSION_KEYS.refresh, LEGACY_SESSION_KEYS.refresh);
       if (refreshToken) {
-        const refreshResponse = await fetch("/api/auth/refresh", {
+        const refreshResponse = await fetch(apiUrl("/api/auth/refresh"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ refreshToken })
