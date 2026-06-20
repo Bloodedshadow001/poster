@@ -854,15 +854,26 @@ function App() {
 
   async function request(path, options = {}, retrying = false) {
     const authToken = readSessionValue(SESSION_KEYS.token, LEGACY_SESSION_KEYS.token) || token;
-    const response = await fetch(path, {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-        ...(options.headers || {})
-      }
-    });
-    const data = await response.json().catch(() => ({}));
+    let response;
+    try {
+      response = await fetch(path, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+          ...(options.headers || {})
+        }
+      });
+    } catch {
+      throw new Error("API server is not reachable. Start the server with npm run server.");
+    }
+    const rawBody = await response.text();
+    let data = {};
+    try {
+      data = rawBody ? JSON.parse(rawBody) : {};
+    } catch {
+      data = {};
+    }
     if (response.status === 401 && !retrying && !path.startsWith("/api/auth/")) {
       const refreshToken = readSessionValue(SESSION_KEYS.refresh, LEGACY_SESSION_KEYS.refresh);
       if (refreshToken) {
@@ -880,7 +891,10 @@ function App() {
         }
       }
     }
-    if (!response.ok) throw new Error(data.message || "Request failed.");
+    if (!response.ok) {
+      const text = rawBody.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+      throw new Error(data.message || text || `Request failed with status ${response.status}.`);
+    }
     return data;
   }
 
