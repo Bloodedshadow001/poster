@@ -84,13 +84,14 @@ app.use(helmet({
     directives: {
       defaultSrc: ["'self'"],
       baseUri: ["'self'"],
-      connectSrc: ["'self'", clientOrigin],
+      connectSrc: ["'self'", clientOrigin, "https://identitytoolkit.googleapis.com", "https://securetoken.googleapis.com", "https://www.googleapis.com"],
       frameAncestors: ["'none'"],
+      frameSrc: ["'self'", "https://accounts.google.com", "https://*.firebaseapp.com"],
       imgSrc: ["'self'", "data:", "blob:", "https:"],
       mediaSrc: ["'self'", "data:", "blob:"],
       objectSrc: ["'none'"],
-      scriptSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      scriptSrc: ["'self'", "https://www.gstatic.com", "https://www.google.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://www.gstatic.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"]
     }
   }

@@ -1,10 +1,26 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const LOGO_SRC = "/assets/parasara-logo.jpg";
 const LOGO_MARK_SRC = "/assets/parasara-mark.jpg";
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
 const LOCAL_AUTH_ENABLED = import.meta.env.VITE_LOCAL_AUTH !== "false";
 const LOCAL_AUTH_KEY = "parasara_local_accounts";
+const FIREBASE_UI_VERSION = "6.0.1";
+const FIREBASE_SDK_VERSION = "10.12.5";
+const FIREBASE_AUTH_PROVIDERS = (import.meta.env.VITE_FIREBASE_SIGN_IN_PROVIDERS || "google,email")
+  .split(",")
+  .map(provider => provider.trim().toLowerCase())
+  .filter(Boolean);
+const FIREBASE_CONFIG = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || ""
+};
+const FIREBASE_AUTH_ENABLED = Boolean(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.authDomain && FIREBASE_CONFIG.projectId && FIREBASE_CONFIG.appId);
 const SESSION_KEYS = {
   token: "parasara_token",
   refresh: "parasara_refresh",
@@ -499,6 +515,111 @@ function localSessionForUser(user) {
   };
 }
 
+function publicFirebaseUser(firebaseUser = {}) {
+  const email = firebaseUser.email || "";
+  const name = firebaseUser.displayName || email.split("@")[0] || "Firebase User";
+  return {
+    id: firebaseUser.uid,
+    businessName: name,
+    email,
+    accountMode: "buyer",
+    profileStrength: email ? 45 : 30,
+    industry: "Media & Advertising",
+    description: "",
+    website: "",
+    location: "",
+    phone: firebaseUser.phoneNumber || "",
+    upiId: "",
+    expertise: "",
+    instagram: "",
+    youtube: "",
+    linkedin: "",
+    facebook: "",
+    twitter: "",
+    tiktok: "",
+    snapchat: "",
+    pinterest: "",
+    whatsapp: "",
+    telegram: "",
+    availability: "available",
+    minBudget: 0,
+    turnaroundDays: 0,
+    followerCount: 0,
+    serviceLanguages: [],
+    serviceCatalog: [],
+    caseStudies: [],
+    averageRating: 0,
+    reviewCount: 0,
+    emailVerified: Boolean(firebaseUser.emailVerified),
+    role: "member",
+    localOnly: true,
+    firebaseOnly: true
+  };
+}
+
+function firebaseSessionForUser(firebaseUser) {
+  return {
+    token: `firebase-${firebaseUser.uid}-${Date.now()}`,
+    refreshToken: "",
+    user: publicFirebaseUser(firebaseUser)
+  };
+}
+
+function loadScriptOnce(src) {
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if (existing?.dataset.loaded === "true") return resolve();
+    if (existing) {
+      existing.addEventListener("load", resolve, { once: true });
+      existing.addEventListener("error", reject, { once: true });
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = src;
+    script.async = true;
+    script.onload = () => {
+      script.dataset.loaded = "true";
+      resolve();
+    };
+    script.onerror = () => reject(new Error(`Could not load ${src}`));
+    document.head.appendChild(script);
+  });
+}
+
+function loadStylesheetOnce(href) {
+  if (document.querySelector(`link[href="${href}"]`)) return;
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.type = "text/css";
+  link.href = href;
+  document.head.appendChild(link);
+}
+
+async function loadFirebaseUi() {
+  loadStylesheetOnce(`https://www.gstatic.com/firebasejs/ui/${FIREBASE_UI_VERSION}/firebase-ui-auth.css`);
+  await loadScriptOnce(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-app-compat.js`);
+  await loadScriptOnce(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-auth-compat.js`);
+  await loadScriptOnce(`https://www.gstatic.com/firebasejs/ui/${FIREBASE_UI_VERSION}/firebase-ui-auth.js`);
+  return { firebase: window.firebase, firebaseui: window.firebaseui };
+}
+
+function firebaseSignInOptions(firebase) {
+  const providerMap = {
+    google: firebase.auth.GoogleAuthProvider.PROVIDER_ID,
+    facebook: firebase.auth.FacebookAuthProvider.PROVIDER_ID,
+    twitter: firebase.auth.TwitterAuthProvider.PROVIDER_ID,
+    github: firebase.auth.GithubAuthProvider.PROVIDER_ID,
+    email: firebase.auth.EmailAuthProvider.PROVIDER_ID,
+    phone: firebase.auth.PhoneAuthProvider.PROVIDER_ID
+  };
+  return FIREBASE_AUTH_PROVIDERS.map(provider => providerMap[provider]).filter(Boolean);
+}
+
+async function signOutFirebaseAuth() {
+  if (!window.firebase?.apps?.length) return;
+  await window.firebase.auth().signOut();
+}
+
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -524,6 +645,65 @@ class ErrorBoundary extends React.Component {
       </main>
     );
   }
+}
+
+function FirebaseAuthPanel({ onSession, setToast }) {
+  const [status, setStatus] = useState(FIREBASE_AUTH_ENABLED ? "loading" : "disabled");
+  const uiRef = useRef(null);
+
+  useEffect(() => {
+    if (!FIREBASE_AUTH_ENABLED) return undefined;
+    let cancelled = false;
+
+    async function startFirebaseUi() {
+      try {
+        const { firebase, firebaseui } = await loadFirebaseUi();
+        if (cancelled) return;
+        if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+        const signInOptions = firebaseSignInOptions(firebase);
+        if (!signInOptions.length) throw new Error("No Firebase sign-in providers are enabled.");
+        const ui = firebaseui.auth.AuthUI.getInstance() || new firebaseui.auth.AuthUI(firebase.auth());
+        uiRef.current = ui;
+        ui.start("#firebaseui-auth-container", {
+          callbacks: {
+            signInSuccessWithAuthResult: authResult => {
+              const session = firebaseSessionForUser(authResult.user);
+              onSession(session);
+              return false;
+            },
+            uiShown: () => {
+              if (!cancelled) setStatus("ready");
+            }
+          },
+          signInFlow: "popup",
+          signInOptions,
+          tosUrl: "#",
+          privacyPolicyUrl: "#"
+        });
+      } catch (error) {
+        if (!cancelled) {
+          setStatus("error");
+          setToast(error.message);
+        }
+      }
+    }
+
+    startFirebaseUi();
+    return () => {
+      cancelled = true;
+      uiRef.current?.reset();
+    };
+  }, [onSession, setToast]);
+
+  if (!FIREBASE_AUTH_ENABLED) return null;
+
+  return (
+    <div className="firebase-auth-panel">
+      <div className="divider"><span>Or continue with Firebase</span></div>
+      <div id="firebaseui-auth-container" />
+      {status === "loading" ? <div className="firebase-loader">Loading sign-in options...</div> : null}
+    </div>
+  );
 }
 
 function audienceRank(value = "") {
@@ -813,6 +993,13 @@ function App() {
   const promptResolver = useRef(null);
 
   const authed = Boolean(token && user);
+  const handleFirebaseSession = useCallback(session => {
+    saveSession(session);
+    setToken(session.token);
+    setUser(session.user);
+    setView("dashboard");
+    setToast("Signed in with Firebase.");
+  }, []);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -1834,6 +2021,11 @@ function App() {
     } catch {
       // Local logout still completes when the server session has already expired.
     }
+    try {
+      await signOutFirebaseAuth();
+    } catch {
+      // Firebase sign-out is best-effort because the widget may not have been loaded.
+    }
     clearSession();
     setToken("");
     setUser(null);
@@ -2115,6 +2307,7 @@ function App() {
                 <button className="btn primary" type="submit">Reset Password</button>
               </form>
             )}
+            <FirebaseAuthPanel onSession={handleFirebaseSession} setToast={setToast} />
             <p className="signup-line">
               {authMode === "login" ? "New to Parasara? " : "Already have an account? "}
               <button onClick={() => setAuthMode(authMode === "login" ? "register" : "login")} type="button">{authMode === "login" ? "Create a business profile" : "Sign in"}</button>

@@ -1393,6 +1393,76 @@ input:focus, textarea:focus, select:focus {
 .divider::before, .divider::after { content: ""; height: 1px; flex: 1; background: var(--line); }
 
 .oauth-grid { display: grid; gap: 18px; }
+.firebase-auth-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.firebase-auth-panel .divider {
+  margin: 18px 0 4px;
+}
+
+.firebase-auth-panel .divider span {
+  white-space: nowrap;
+}
+
+#firebaseui-auth-container {
+  min-height: 52px;
+}
+
+.firebase-loader {
+  text-align: center;
+  color: #737985;
+  font-weight: 700;
+}
+
+.firebase-auth-panel .firebaseui-container {
+  max-width: none;
+  margin: 0;
+  background: transparent;
+  box-shadow: none;
+  font-family: Inter, sans-serif;
+}
+
+.firebase-auth-panel .firebaseui-card-content,
+.firebase-auth-panel .firebaseui-card-actions {
+  padding: 0;
+}
+
+.firebase-auth-panel .firebaseui-idp-list {
+  margin: 0;
+}
+
+.firebase-auth-panel .firebaseui-list-item {
+  margin-bottom: 12px;
+}
+
+.firebase-auth-panel .firebaseui-idp-button {
+  max-width: none;
+  min-height: 48px;
+  border-radius: 6px;
+  box-shadow: none;
+  border: 1px solid rgba(127, 91, 22, .24);
+}
+
+.firebase-auth-panel .firebaseui-text,
+.firebase-auth-panel .firebaseui-title,
+.firebase-auth-panel .firebaseui-subtitle,
+.firebase-auth-panel .firebaseui-label {
+  color: var(--ink);
+  font-family: Inter, sans-serif;
+}
+
+.firebase-auth-panel .firebaseui-button {
+  border-radius: 6px;
+  font-family: Inter, sans-serif;
+  font-weight: 700;
+}
+
+.firebase-auth-panel .firebaseui-button.firebaseui-id-submit {
+  background: var(--navy);
+}
+
 .signup-line {
   display: flex;
   align-items: center;
