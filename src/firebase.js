@@ -12,9 +12,33 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
-const app = initializeApp(firebaseConfig);
-const analytics = typeof window !== 'undefined' && import.meta.env.VITE_FIREBASE_MEASUREMENT_ID ? getAnalytics(app) : null;
-const auth = getAuth(app);
-const googleProvider = new GoogleAuthProvider();
+function hasFirebaseConfig() {
+  return Boolean(
+    firebaseConfig.apiKey &&
+    firebaseConfig.authDomain &&
+    firebaseConfig.projectId &&
+    firebaseConfig.appId
+  );
+}
 
-export { app, analytics, auth, googleProvider };
+let app = null;
+let analytics = null;
+let auth = null;
+let googleProvider = null;
+let isFirebaseAvailable = false;
+
+if (hasFirebaseConfig()) {
+  try {
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    googleProvider = new GoogleAuthProvider();
+    if (typeof window !== "undefined" && firebaseConfig.measurementId) {
+      analytics = getAnalytics(app);
+    }
+    isFirebaseAvailable = true;
+  } catch (error) {
+    console.error("Firebase initialization failed:", error);
+  }
+}
+
+export { app, analytics, auth, googleProvider, isFirebaseAvailable };

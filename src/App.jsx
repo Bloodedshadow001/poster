@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { signInWithPopup } from "firebase/auth";
-import { auth, googleProvider } from "./firebase";
+import { auth, googleProvider, isFirebaseAvailable } from "./firebase";
 
 const LOGO_SRC = "/assets/parasara-logo.jpg";
 const LOGO_MARK_SRC = "/assets/parasara-mark.jpg";
@@ -654,8 +654,13 @@ function FirebaseAuthPanel({ onSession, setToast }) {
   const uiRef = useRef(null);
 
   const signInWithGoogle = useCallback(async () => {
-    if (!FIREBASE_AUTH_ENABLED || !FIREBASE_AUTH_PROVIDERS.includes("google")) {
-      setToast("Google sign-in is not configured.");
+    if (!FIREBASE_AUTH_ENABLED || !isFirebaseAvailable || !FIREBASE_AUTH_PROVIDERS.includes("google")) {
+      setToast("Google sign-in is not configured or Firebase is not available.");
+      return;
+    }
+
+    if (!auth || !googleProvider) {
+      setToast("Firebase authentication is unavailable.");
       return;
     }
 
@@ -669,7 +674,7 @@ function FirebaseAuthPanel({ onSession, setToast }) {
   }, [onSession, setToast]);
 
   useEffect(() => {
-    if (!FIREBASE_AUTH_ENABLED) return undefined;
+    if (!FIREBASE_AUTH_ENABLED || !isFirebaseAvailable) return undefined;
     let cancelled = false;
 
     async function startFirebaseUi() {
@@ -718,12 +723,15 @@ function FirebaseAuthPanel({ onSession, setToast }) {
     <div className="firebase-auth-panel">
       <div className="divider"><span>Or continue with Firebase</span></div>
       <div id="firebaseui-auth-container" />
-      {FIREBASE_AUTH_PROVIDERS.includes("google") ? (
+      {FIREBASE_AUTH_PROVIDERS.includes("google") && isFirebaseAvailable ? (
         <button className="btn secondary firebase-google-button" type="button" onClick={signInWithGoogle}>
           Continue with Google
         </button>
       ) : null}
       {status === "loading" ? <div className="firebase-loader">Loading sign-in options...</div> : null}
+      {!isFirebaseAvailable && FIREBASE_AUTH_ENABLED ? (
+        <div className="firebase-error">Firebase is configured, but initialization failed. Check your project keys and authorized domains.</div>
+      ) : null}
     </div>
   );
 }
