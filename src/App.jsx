@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { signInWithPopup } from "firebase/auth";
+import { auth, googleProvider } from "./firebase";
 
 const LOGO_SRC = "/assets/parasara-logo.jpg";
 const LOGO_MARK_SRC = "/assets/parasara-mark.jpg";
@@ -651,6 +653,21 @@ function FirebaseAuthPanel({ onSession, setToast }) {
   const [status, setStatus] = useState(FIREBASE_AUTH_ENABLED ? "loading" : "disabled");
   const uiRef = useRef(null);
 
+  const signInWithGoogle = useCallback(async () => {
+    if (!FIREBASE_AUTH_ENABLED || !FIREBASE_AUTH_PROVIDERS.includes("google")) {
+      setToast("Google sign-in is not configured.");
+      return;
+    }
+
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const session = firebaseSessionForUser(result.user);
+      onSession(session);
+    } catch (error) {
+      setToast(error.message || "Google sign-in failed.");
+    }
+  }, [onSession, setToast]);
+
   useEffect(() => {
     if (!FIREBASE_AUTH_ENABLED) return undefined;
     let cancelled = false;
@@ -701,6 +718,11 @@ function FirebaseAuthPanel({ onSession, setToast }) {
     <div className="firebase-auth-panel">
       <div className="divider"><span>Or continue with Firebase</span></div>
       <div id="firebaseui-auth-container" />
+      {FIREBASE_AUTH_PROVIDERS.includes("google") ? (
+        <button className="btn secondary firebase-google-button" type="button" onClick={signInWithGoogle}>
+          Continue with Google
+        </button>
+      ) : null}
       {status === "loading" ? <div className="firebase-loader">Loading sign-in options...</div> : null}
     </div>
   );
